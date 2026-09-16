@@ -1,4 +1,4 @@
-module github.com/coinbase/mongobetween
+module github.com/jonoans/mongobetween
 
 go 1.26.0
 
