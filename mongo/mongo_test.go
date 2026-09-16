@@ -1,9 +1,12 @@
 package mongo_test
 
 import (
+	"os"
+	"testing"
+
 	"github.com/DataDog/datadog-go/statsd"
-	"github.com/coinbase/mongobetween/mongo"
-	"github.com/coinbase/mongobetween/proxy"
+	"github.com/jonoans/mongobetween/mongo"
+	"github.com/jonoans/mongobetween/proxy"
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -12,8 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"go.mongodb.org/mongo-driver/x/mongo/driver"
 	"go.uber.org/zap"
-	"os"
-	"testing"
 )
 
 func insertOpMsg(t *testing.T) *mongo.Message {

@@ -2,9 +2,10 @@ package mongo
 
 import (
 	b64 "encoding/base64"
-	"github.com/coinbase/mongobetween/lruttl"
-	"go.mongodb.org/mongo-driver/x/mongo/driver"
 	"time"
+
+	"github.com/jonoans/mongobetween/lruttl"
+	"go.mongodb.org/mongo-driver/x/mongo/driver"
 )
 
 // on a 64-bit machine, 1 million cursors uses around 480mb of memory
