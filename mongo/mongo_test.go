@@ -8,12 +8,11 @@ import (
 	"github.com/jonoans/mongobetween/mongo"
 	"github.com/jonoans/mongobetween/proxy"
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/description"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
-	"go.mongodb.org/mongo-driver/x/mongo/driver"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/description"
 	"go.uber.org/zap"
 )
 
@@ -25,7 +24,7 @@ func insertOpMsg(t *testing.T) *mongo.Message {
 	assert.Nil(t, err)
 
 	doc1, err := bson.Marshal(bson.D{
-		{Key: "_id", Value: primitive.NewObjectID()},
+		{Key: "_id", Value: bson.NewObjectID()},
 		{Key: "name", Value: "Misty"},
 		{Key: "age", Value: 10},
 		{Key: "city", Value: "Cerulean City"},
@@ -33,7 +32,7 @@ func insertOpMsg(t *testing.T) *mongo.Message {
 	assert.Nil(t, err)
 
 	doc2, err := bson.Marshal(bson.D{
-		{Key: "_id", Value: primitive.NewObjectID()},
+		{Key: "_id", Value: bson.NewObjectID()},
 		{Key: "name", Value: "Brock"},
 		{Key: "age", Value: 15},
 		{Key: "city", Value: "Pewter City"},
@@ -107,7 +106,7 @@ func TestRoundTripProcessError(t *testing.T) {
 	assert.Equal(t, int32(2), single.Lookup("n").Int32())
 	assert.Equal(t, 1.0, single.Lookup("ok").Double())
 
-	assert.Equal(t, description.Standalone, m.Description().Servers[0].Kind)
+	assert.Equal(t, description.ServerKindStandalone, m.Description().Servers[0].Kind)
 
 	// kill the proxy
 	p.Kill()

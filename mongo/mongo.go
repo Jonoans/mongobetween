@@ -11,13 +11,14 @@ import (
 	"unsafe"
 
 	"github.com/DataDog/datadog-go/statsd"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/address"
-	"go.mongodb.org/mongo-driver/mongo/description"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
-	"go.mongodb.org/mongo-driver/x/mongo/driver"
-	"go.mongodb.org/mongo-driver/x/mongo/driver/topology"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/address"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/description"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/mnet"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/topology"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +54,7 @@ func Connect(log *zap.Logger, sd *statsd.Client, opts *options.ClientOptions, pi
 
 	var err error
 	log.Info("Connect")
-	c, err := mongo.Connect(ctx, opts)
+	c, err := mongo.Connect(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -253,14 +254,47 @@ func (m *Mongo) selectServer(requestCursorID int64, collection string, transDeta
 	}
 
 	// Select a server
-	selector := description.CompositeSelector([]description.ServerSelector{
-		description.ReadPrefSelector(readpref.Primary()),   // ignored by sharded clusters
-		description.LatencySelector(15 * time.Millisecond), // default localThreshold for the client
-	})
-	return m.topology.SelectServer(m.roundTripCtx, selector)
+	return m.topology.SelectServer(m.roundTripCtx, primaryLatencySelector{latency: 15 * time.Millisecond})
 }
 
-func (m *Mongo) checkoutConnection(server driver.Server) (conn driver.Connection, err error) {
+type primaryLatencySelector struct {
+	latency time.Duration
+}
+
+func (s primaryLatencySelector) SelectServer(topo description.Topology, candidates []description.Server) ([]description.Server, error) {
+	selected := candidates
+	switch topo.Kind {
+	case description.TopologyKindReplicaSetWithPrimary, description.TopologyKindReplicaSetNoPrimary:
+		var primaries []description.Server
+		for _, srv := range candidates {
+			if srv.Kind == description.ServerKindRSPrimary {
+				primaries = append(primaries, srv)
+			}
+		}
+		selected = primaries
+	}
+
+	if len(selected) <= 1 {
+		return selected, nil
+	}
+
+	min := selected[0].AverageRTT
+	for _, srv := range selected[1:] {
+		if srv.AverageRTTSet && srv.AverageRTT < min {
+			min = srv.AverageRTT
+		}
+	}
+
+	withinLatency := make([]description.Server, 0, len(selected))
+	for _, srv := range selected {
+		if !srv.AverageRTTSet || srv.AverageRTT <= min+s.latency {
+			withinLatency = append(withinLatency, srv)
+		}
+	}
+	return withinLatency, nil
+}
+
+func (m *Mongo) checkoutConnection(server driver.Server) (conn *mnet.Connection, err error) {
 	defer func(start time.Time) {
 		addr := ""
 		if conn != nil {
@@ -281,7 +315,7 @@ func (m *Mongo) checkoutConnection(server driver.Server) (conn driver.Connection
 }
 
 // see https://github.com/mongodb/mongo-go-driver/blob/v1.7.2/x/mongo/driver/operation.go#L664-L681
-func (m *Mongo) roundTrip(conn driver.Connection, req []byte, unacknowledged bool, tags []string) (res []byte, err error) {
+func (m *Mongo) roundTrip(conn *mnet.Connection, req []byte, unacknowledged bool, tags []string) (res []byte, err error) {
 	defer func(start time.Time) {
 		tags = append(tags, fmt.Sprintf("success:%v", err == nil))
 
@@ -294,7 +328,7 @@ func (m *Mongo) roundTrip(conn driver.Connection, req []byte, unacknowledged boo
 		_ = m.statsd.Timing("round_trip", time.Since(start), tags, 1)
 	}(time.Now())
 
-	if err = conn.WriteWireMessage(m.roundTripCtx, req); err != nil {
+	if err = conn.Write(m.roundTripCtx, req); err != nil {
 		return nil, wrapNetworkError(err)
 	}
 
@@ -302,7 +336,7 @@ func (m *Mongo) roundTrip(conn driver.Connection, req []byte, unacknowledged boo
 		return nil, nil
 	}
 
-	if res, err = conn.ReadWireMessage(m.roundTripCtx); err != nil {
+	if res, err = conn.Read(m.roundTripCtx); err != nil {
 		return nil, wrapNetworkError(err)
 	}
 
@@ -315,7 +349,7 @@ func wrapNetworkError(err error) error {
 }
 
 // Process the error with the given ErrorProcessor, returning true if processing causes the topology to change
-func (m *Mongo) processError(err error, ep driver.ErrorProcessor, addr address.Address, conn driver.Connection) {
+func (m *Mongo) processError(err error, ep driver.ErrorProcessor, addr address.Address, conn *mnet.Connection) {
 	last := m.Description()
 
 	// gather fields for logging

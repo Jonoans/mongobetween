@@ -1,9 +1,10 @@
 package mongo
 
 import (
-	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/x/bsonx/bsoncore"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"go.mongodb.org/mongo-driver/v2/x/bsonx/bsoncore"
 )
 
 func NewOpMsg(single bsoncore.Document, sequence []bsoncore.Document) *Message {

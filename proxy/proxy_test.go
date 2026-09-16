@@ -10,10 +10,11 @@ import (
 
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/stretchr/testify/assert"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 	"go.uber.org/zap"
 
 	mongob "github.com/jonoans/mongobetween/mongo"
@@ -110,16 +111,15 @@ func TestProxyUnacknowledgedWrites(t *testing.T) {
 	// unacknowledged write concern for testing.
 	wc := writeconcern.Unacknowledged()
 	setupCollection := client.Database("test").Collection("test_proxy_unacknowledged_writes")
-	unackCollection, err := setupCollection.Clone(options.Collection().SetWriteConcern(wc))
-	assert.Nil(t, err)
+	unackCollection := setupCollection.Clone(options.Collection().SetWriteConcern(wc))
 
 	// Setup by deleting all documents.
-	_, err = setupCollection.DeleteMany(ctx, bson.D{})
+	_, err := setupCollection.DeleteMany(ctx, bson.D{})
 	assert.Nil(t, err)
 
 	ash := Trainer{"Ash", 10, "Pallet Town"}
 	_, err = unackCollection.InsertOne(ctx, ash)
-	assert.Equal(t, mongo.ErrUnacknowledgedWrite, err) // driver returns a special error value for w=0 writes
+	assert.Equal(t, driver.ErrUnacknowledgedWrite, err) // driver returns a special error value for w=0 writes
 
 	// Insert a document using the setup collection and ensure document count is 2. Doing this ensures that the proxy
 	// did not crash while processing the unacknowledged write.
@@ -293,7 +293,7 @@ func setupClient(t *testing.T, host string, port int, clientOpts ...*options.Cli
 	uriOpts := options.Client().ApplyURI(proxyURI)
 	allClientOpts := append([]*options.ClientOptions{uriOpts}, clientOpts...)
 
-	client, err := mongo.Connect(ctx, allClientOpts...)
+	client, err := mongo.Connect(allClientOpts...)
 	assert.Nil(t, err)
 
 	// Call Ping with a low timeout to ensure the cluster is running and fail-fast if not.
