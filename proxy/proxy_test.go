@@ -14,7 +14,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
-	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 	"go.uber.org/zap"
 
 	mongob "github.com/jonoans/mongobetween/mongo"
@@ -118,8 +117,9 @@ func TestProxyUnacknowledgedWrites(t *testing.T) {
 	assert.Nil(t, err)
 
 	ash := Trainer{"Ash", 10, "Pallet Town"}
-	_, err = unackCollection.InsertOne(ctx, ash)
-	assert.Equal(t, driver.ErrUnacknowledgedWrite, err) // driver returns a special error value for w=0 writes
+	result, err := unackCollection.InsertOne(ctx, ash)
+	assert.Nil(t, err)
+	assert.False(t, result.Acknowledged) // driver v2 reports unacknowledged writes via the result, not an error
 
 	// Insert a document using the setup collection and ensure document count is 2. Doing this ensures that the proxy
 	// did not crash while processing the unacknowledged write.
